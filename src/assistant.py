@@ -1,27 +1,18 @@
 import threading
-import time
 from pymavlink import mavutil
-
+import time
+from src.mavlink_connection import master
 from src.command_dispatcher import dispatch
-from src.telemetry_state import telemetry
+from src.telemetry_state import telemetry, telemetry_ready
 
 CONNECTION_STRING = "udp:127.0.0.1:14550"
 
-COPTER_MODES = {
-    0: "STABILIZE",
-    1: "ACRO",
-    2: "ALT_HOLD",
-    3: "AUTO",
-    4: "GUIDED",
-    5: "LOITER",
-    6: "RTL",
-    9: "LAND",
-}
 
 def telemetry_loop():
-    master = mavutil.mavlink_connection(CONNECTION_STRING)
     master.wait_heartbeat()
     print("[Telemetry] Connected")
+
+    first_heartbeat = False
 
     while True:
         msg = master.recv_match(
@@ -33,18 +24,33 @@ def telemetry_loop():
         if not msg:
             continue
 
-        t = msg.get_type()
+        msg_type = msg.get_type()
 
-        if t == "HEARTBEAT":
+        if msg_type == "HEARTBEAT":
             telemetry["armed"] = bool(
                 msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED
             )
-            telemetry["mode"] = COPTER_MODES.get(msg.custom_mode, "UNKNOWN")
 
-        elif t == "GLOBAL_POSITION_INT":
+            telemetry["mode"] = {
+                0: "STABILIZE",
+                1: "ACRO",
+                2: "ALT_HOLD",
+                3: "AUTO",
+                4: "GUIDED",
+                5: "LOITER",
+                6: "RTL",
+                9: "LAND",
+            }.get(msg.custom_mode, "UNKNOWN")
+
+            # Mark telemetry as ready on first valid heartbeat
+            if not first_heartbeat:
+                telemetry_ready.set()
+                first_heartbeat = True
+
+        elif msg_type == "GLOBAL_POSITION_INT":
             telemetry["altitude"] = msg.relative_alt / 1000.0
 
-        elif t == "VFR_HUD":
+        elif msg_type == "VFR_HUD":
             telemetry["groundspeed"] = msg.groundspeed
 
 
@@ -55,21 +61,31 @@ def assistant_loop():
 
     while True:
         try:
-            command = input("Assistant> ").strip().lower()
+            command = input("Assistant> ").strip()
+
+            if command.lower() == "exit":
+                print("Shutting down assistant.")
+                break
+
+            if not command:
+                continue
+
+            dispatch(command)
+
         except KeyboardInterrupt:
+            print("\nShutting down assistant.")
             break
-
-        if command == "exit":
-            break
-
-        dispatch(command)
-
-    print("Shutting down assistant.")
 
 
 if __name__ == "__main__":
-    t = threading.Thread(target=telemetry_loop, daemon=True)
-    t.start()
+    telemetry_thread = threading.Thread(
+        target=telemetry_loop,
+        daemon=True
+    )
+    telemetry_thread.start()
 
-    time.sleep(1)  # let telemetry warm up
+    print("Waiting for telemetry synchronization...")
+    telemetry_ready.wait()
+    print("Telemetry synchronized. Assistant ready.")
+
     assistant_loop()

@@ -1,23 +1,52 @@
-# Voice-Controlled Drone Assistant
-
+# Voice-Controlled Drone Assistant (MAVLink / ArduPilot)
 A safety-first, MAVLink-based drone control assistant that enables
 natural-language command execution over telemetry using ArduPilot SITL.
+This project implements a voice- and text-controlled drone assistant for ArduPilot-based vehicles using MAVLink.
+The system provides safety-gated command execution, real-time telemetry synchronization, and modular command routing.
+It is designed as a lightweight ground control interface capable of controlling simulated or real UAVs via guided flight commands.
 
-## Architecture Overview
+## System Architecture
 
-The system is designed with a strict safety-first and layered architecture.
-
-User (Text / Voice)
-↓
+User Command (Voice / Text)
+        ↓
 Assistant Interface
-↓
+        ↓
 Command Dispatcher
-↓
-Safety Gate
-↓
-MAVLink Control Layer
-↓
-ArduPilot (SITL / Real Drone)
+        ↓
+Safety Gate (Telemetry-based validation)
+        ↓
+MAVLink Command Sender
+        ↓
+ArduPilot (SITL / Real Vehicle)
+
+Parallel Process:
+Telemetry Listener → Shared Telemetry State
+
+## Project Structure
+
+src/
+├── assistant.py            # Main assistant loop
+├── command_dispatcher.py   # Routes commands to actions
+├── safety_gate.py          # Safety validation logic
+├── telemetry_state.py      # Shared telemetry state
+├── mavlink_connection.py   # MAVLink connection abstraction
+
+## How It Works
+
+- A background telemetry thread continuously updates vehicle state.
+- User commands are normalized and dispatched.
+- Every command passes through a safety gate that checks mode, arming state, and flight conditions.
+- Only validated commands are sent to the vehicle via MAVLink.
+- The system prevents unsafe actions such as movement without arming or incorrect flight modes.
+
+## Example Commands
+
+- set mode guided
+- takeoff
+- land
+- go forward
+- go left
+- rotate right
 
 
 ### Key Design Principles
@@ -95,6 +124,10 @@ python -m src.assistant
 
 
 
+## Safety Notice
+
+This project is intended for simulation and controlled testing environments.
+Always validate safety logic thoroughly before deploying on real hardware.
 
 ⚠️ Make sure the markdown fences are correct.
 

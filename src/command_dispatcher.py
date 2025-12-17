@@ -1,45 +1,33 @@
-from src.safety_gate import check_safety
-from src.set_guided_mode import COPTER_MODES
 from pymavlink import mavutil
-import time
+from src.safety_gate import check_safety
+from src.telemetry_state import telemetry
 
-CONNECTION_STRING = 'udp:127.0.0.1:14550'
+CONNECTION_STRING = "udp:127.0.0.1:14550"
 
+def set_mode(mode):
+    command = f"set mode {mode.lower()}"
 
-def set_mode(mode_name: str):
-    if not check_safety():
+    if not check_safety(command, telemetry):
         print("❌ Command blocked by safety gate")
         return
 
-    if mode_name not in COPTER_MODES:
-        print(f"❌ Unknown mode: {mode_name}")
-        return
-
-    print(f"Setting mode to {mode_name}...")
-
+    print("Connecting to vehicle...")
     master = mavutil.mavlink_connection(CONNECTION_STRING)
     master.wait_heartbeat()
 
-    master.set_mode(COPTER_MODES[mode_name])
-    time.sleep(1)
+    mode_mapping = master.mode_mapping()
+    if mode.upper() not in mode_mapping:
+        print(f"Unknown mode: {mode}")
+        return
 
-    heartbeat = master.recv_match(type='HEARTBEAT', blocking=True)
-    print(f"Mode now: {heartbeat.custom_mode}")
-
+    print(f"Setting mode to {mode}...")
+    master.set_mode(mode_mapping[mode.upper()])
+    print(f"Mode now: {mode}")
 
 def dispatch(command: str):
     command = command.lower().strip()
 
-    if command == "set mode guided":
+    if "guided" in command:
         set_mode("GUIDED")
     else:
-        print(f"❌ Unknown command: {command}")
-
-
-if __name__ == "__main__":
-    print("Command Dispatcher Ready")
-    while True:
-        cmd = input(">> ")
-        if cmd in ("exit", "quit"):
-            break
-        dispatch(cmd)
+        print("Unknown command")

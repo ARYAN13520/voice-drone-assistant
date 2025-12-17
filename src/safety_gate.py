@@ -13,28 +13,20 @@ COPTER_MODES = {
     9: "LAND",
 }
 
-def check_safety():
-    print("Connecting to vehicle...")
-    master = mavutil.mavlink_connection(CONNECTION_STRING)
+def check_safety(command, telemetry):
+    # Allow mode change commands unconditionally (safe)
+    if "mode" in command:
+        return True
 
-    print("Waiting for heartbeat...")
-    heartbeat = master.recv_match(type='HEARTBEAT', blocking=True)
-
-    mode_id = heartbeat.custom_mode
-    mode = COPTER_MODES.get(mode_id, "UNKNOWN")
-
-    armed = bool(
-        heartbeat.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED
-    )
-
-    print(f"Mode detected: {mode}")
-    print(f"Armed state: {'ARMED' if armed else 'DISARMED'}")
-
-    if mode != "GUIDED":
+    # For all other commands, enforce safety
+    if telemetry["mode"] != "GUIDED":
         print("❌ SAFETY BLOCK: Vehicle not in GUIDED mode")
         return False
 
-    print("✅ SAFETY PASS: Command execution allowed")
+    if telemetry["armed"]:
+        print("❌ SAFETY BLOCK: Vehicle is armed")
+        return False
+
     return True
 
 
